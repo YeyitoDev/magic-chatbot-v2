@@ -30,7 +30,7 @@ jobs:
     environment: ${{ github.event.inputs.environment || 'production' }}
     concurrency: deploy-group    # Asegura que solo corra un deploy a la vez
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: Configurar variables según ambiente

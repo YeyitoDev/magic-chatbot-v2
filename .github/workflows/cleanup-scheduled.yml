@@ -33,7 +33,7 @@ jobs:
       DEFAULT_MODE: ${{ github.event.inputs.mode || (github.event_name == 'schedule' && 'eliminar' || 'validar') }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v5
