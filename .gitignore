@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Secretos y configuración local (usar .env.example como plantilla)
+.env
+.env.*
+!.env.example
+credentials/
+*.session
+*.session-journal
+
+# Datos generados en tiempo de ejecución
+logs/
+output/
+images/
+csv/
+estados/
+pricing_cache.json
+reports/output/
+
+# Editor / SO
+.DS_Store
+.vscode/
+.idea/

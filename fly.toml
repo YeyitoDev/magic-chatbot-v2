@@ -1,0 +1,37 @@
+app = "magic-services"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ENVIRONMENT = "production"
+  PYTHONUNBUFFERED = "1"
+  GOOGLE_CREDENTIALS_PATH = "./credentials/google.json"
+  # Puerto que usa el health server (health_server.py lee PORT)
+  PORT = "8080"
+
+# IMPORTANTE: el bot corre en modo polling (getUpdates), que solo admite
+# UNA conexión por token. Por eso forzamos exactamente 1 máquina y un
+# despliegue "immediate" (detiene la anterior antes de iniciar la nueva)
+# para evitar el error "Conflict: terminated by other getUpdates request".
+[deploy]
+  strategy = "immediate"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[http_service]
+  internal_port = 8080
+  force_https = false
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "get"
+    path = "/"

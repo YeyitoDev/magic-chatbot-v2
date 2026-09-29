@@ -1,0 +1,31 @@
+name: Scheduled Health Check
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # cada 6 horas
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    # Solo en el repo operativo (el repo público no tiene secretos).
+    if: github.repository == 'YeyitoDev/magic-services'
+    steps:
+    - name: Check bot is alive
+      run: |
+        curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getMe" | python3 -c "
+        import json,sys
+        data=json.load(sys.stdin)
+        if data.get('ok'):
+            print(f'✅ Bot OK: @{data[\"result\"][\"username\"]}')
+        else:
+            print('❌ Bot DOWN')
+            sys.exit(1)
+        "
+
+    - name: Alert if down
+      if: failure()
+      run: |
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d "chat_id=${{ secrets.ADMIN_CHAT_ID }}" \
+          -d "text=🚨 ALERTA: Bot CAÍDO - $(date)"

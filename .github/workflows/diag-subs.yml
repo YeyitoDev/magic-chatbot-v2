@@ -1,0 +1,47 @@
+name: "🔧 Diagnóstico Suscripciones (read-only)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ambiente"
+        required: true
+        default: "production"
+        type: choice
+        options: ["testing", "production"]
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    # Solo en el repo operativo (el repo público no tiene secretos).
+    if: github.repository == 'YeyitoDev/magic-services'
+    permissions:
+      contents: read
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: Install dependencies
+        run: pip install pymysql python-dotenv "telethon>=1.30.0"
+
+      - name: Diagnóstico BD
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_PORT: "3306"
+        run: python scripts/diag_subs.py
+
+      - name: Diagnóstico Telethon (fetch de miembros)
+        env:
+          TELETHON_API_ID: ${{ secrets.TELETHON_API_ID }}
+          TELETHON_API_HASH: ${{ secrets.TELETHON_API_HASH }}
+          TELETHON_SESSION: ${{ secrets.TELETHON_SESSION }}
+          TELEGRAM_VIP_GROUP_ID: ${{ secrets.TELEGRAM_VIP_GROUP_ID }}
+        run: python scripts/diag_telethon_members.py

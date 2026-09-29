@@ -1,0 +1,107 @@
+# See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
+#
+# Este workflow:
+#   1. Sincroniza los secrets de GitHub -> Fly (modo --stage, no reinicia).
+#   2. Despliega la app (testing o production según input).
+#
+# Los secrets nunca se imprimen en logs. GOOGLE_CREDENTIALS_JSON se codifica
+# en base64 antes de enviarse (startup.py lo decodifica al arrancar).
+
+name: Fly Deploy
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ambiente de despliegue"
+        required: true
+        default: "testing"
+        type: choice
+        options: ["testing", "production"]
+
+jobs:
+  deploy:
+    name: Deploy app
+    runs-on: ubuntu-latest
+    # Solo en el repo operativo (el repo público no tiene secretos).
+    if: github.repository == 'YeyitoDev/magic-services'
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    concurrency: deploy-group    # Asegura que solo corra un deploy a la vez
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Configurar variables según ambiente
+        id: config
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "FLY_APP=magic-services" >> $GITHUB_OUTPUT
+            echo "ENVIRONMENT=production" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            echo "FLY_APP=magic-services" >> $GITHUB_OUTPUT
+            echo "ENVIRONMENT=production" >> $GITHUB_OUTPUT
+          else
+            echo "FLY_APP=magic-services-testing" >> $GITHUB_OUTPUT
+            echo "ENVIRONMENT=testing" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Crear app en Fly si no existe
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl status --app "${{ steps.config.outputs.FLY_APP }}" >/dev/null 2>&1 \
+            || flyctl apps create "${{ steps.config.outputs.FLY_APP }}" || true
+
+      - name: Sincronizar secrets de GitHub -> Fly (staged)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN_LINKS: ${{ secrets.TELEGRAM_BOT_TOKEN_LINKS }}
+          TELEGRAM_VALIDATOR_IDS: ${{ secrets.TELEGRAM_VALIDATOR_IDS }}
+          TELEGRAM_VIP_GROUP_ID: ${{ secrets.TELEGRAM_VIP_GROUP_ID }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+
+          # Solo agrega secrets cuyo valor no esté vacío
+          ARGS=()
+          add() { [ -n "${2:-}" ] && ARGS+=("$1=$2") || true; }
+
+          add TELEGRAM_BOT_TOKEN        "$TELEGRAM_BOT_TOKEN"
+          add TELEGRAM_BOT_TOKEN_LINKS  "$TELEGRAM_BOT_TOKEN_LINKS"
+          add TELEGRAM_VALIDATOR_IDS    "$TELEGRAM_VALIDATOR_IDS"
+          add TELEGRAM_VIP_GROUP_ID     "$TELEGRAM_VIP_GROUP_ID"
+          add DB_USER                   "$DB_USER"
+          add DB_PASSWORD               "$DB_PASSWORD"
+          add DB_HOST                   "$DB_HOST"
+          add DB_NAME                   "$DB_NAME"
+          add GEMINI_API_KEY            "$GEMINI_API_KEY"
+          add AWS_ACCESS_KEY_ID         "$AWS_ACCESS_KEY_ID"
+          add AWS_SECRET_ACCESS_KEY     "$AWS_SECRET_ACCESS_KEY"
+
+          # Constantes
+          ARGS+=("DB_ENGINE=mysql+pymysql")
+          ARGS+=("DB_PORT=3306")
+          ARGS+=("AWS_REGION=us-east-1")
+
+          # Credenciales de Google: codificar en base64 (startup.py lo decodifica)
+          if [ -n "${GOOGLE_CREDENTIALS_JSON:-}" ]; then
+            GOOGLE_CREDENTIALS_B64=$(printf '%s' "$GOOGLE_CREDENTIALS_JSON" | base64 -w0)
+            ARGS+=("GOOGLE_CREDENTIALS_JSON=$GOOGLE_CREDENTIALS_B64")
+          fi
+
+          flyctl secrets set --stage --app "${{ steps.config.outputs.FLY_APP }}" "${ARGS[@]}"
+
+      - name: Desplegar
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --remote-only --app "${{ steps.config.outputs.FLY_APP }}" --env ENVIRONMENT="${{ steps.config.outputs.ENVIRONMENT }}"

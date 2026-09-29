@@ -1,0 +1,104 @@
+name: "🚨 Detectar Intrusos en Grupo VIP"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ambiente"
+        required: true
+        default: "production"
+        type: choice
+        options: ["testing", "production"]
+      mode:
+        description: "Modo"
+        required: true
+        default: "validar"
+        type: choice
+        options: ["validar", "eliminar"]
+  schedule:
+    # Ejecutar domingos a las 8am Lima (13:00 UTC) — antes de la limpieza semanal
+    - cron: "0 13 * * 0"
+
+jobs:
+  detect-intruders:
+    runs-on: ubuntu-latest
+    # Solo en el repo operativo (el repo público no tiene secretos).
+    if: github.repository == 'YeyitoDev/magic-services'
+    permissions:
+      contents: read
+    environment: ${{ github.event_name == 'schedule' && 'production' || github.event.inputs.environment || 'production' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create .env
+        run: |
+          cat > .env << EOF
+          ENVIRONMENT=${{ github.event_name == 'schedule' && 'production' || github.event.inputs.environment || 'production' }}
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_NOTIFY_IDS=${{ secrets.ADMIN_NOTIFY_IDS }}
+          PROTECTED_USER_IDS=${{ secrets.PROTECTED_USER_IDS }}
+          TELEGRAM_VIP_GROUP_ID=${{ secrets.TELEGRAM_VIP_GROUP_ID }}
+          TELEGRAM_VALIDATOR_IDS=${{ secrets.TELEGRAM_VALIDATOR_IDS }}
+          DB_ENGINE=mysql+pymysql
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_PORT=3306
+          TELETHON_API_ID=${{ secrets.TELETHON_API_ID }}
+          TELETHON_API_HASH=${{ secrets.TELETHON_API_HASH }}
+          TELETHON_SESSION=${{ secrets.TELETHON_SESSION }}
+          TIMEZONE=America/Lima
+          EOF
+
+      - name: Detectar intrusos
+        env:
+          # Solo elimina en corridas manuales con mode=eliminar.
+          # Las corridas programadas siempre son de solo lectura.
+          REMOVE_INTRUDERS: ${{ github.event_name != 'schedule' && github.event.inputs.mode == 'eliminar' && 'true' || 'false' }}
+        run: |
+          python scripts/detect_intruders.py > /tmp/intruder_report.txt 2>&1 || true
+          cat /tmp/intruder_report.txt
+
+      - name: Save report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: intruder-report-${{ github.run_id }}
+          path: |
+            /tmp/intruder_report.txt
+            /tmp/intruders_list.txt
+          retention-days: 30
+
+      - name: Send report via Telegram
+        if: always()
+        run: |
+          REPORT=$(cat /tmp/intruder_report.txt)
+          # Truncar si excede 4096 caracteres (límite de Telegram)
+          if [ ${#REPORT} -gt 4000 ]; then
+            REPORT="${REPORT:0:4000}"
+            REPORT="${REPORT}"$'\n\n'"... (reporte truncado, ver artifact completo)"
+          fi
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.ADMIN_CHAT_ID }}" \
+            -d "text=${REPORT}" \
+            -d "parse_mode=Markdown" || true
+
+      - name: Send intruders list if found
+        if: always()
+        run: |
+          if [ -f /tmp/intruders_list.txt ] && [ -s /tmp/intruders_list.txt ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
+              -F "chat_id=${{ secrets.ADMIN_CHAT_ID }}" \
+              -F "document=@/tmp/intruders_list.txt" \
+              -F "caption=🚨 Lista de intrusos detectados en Grupo VIP" || true
+          fi

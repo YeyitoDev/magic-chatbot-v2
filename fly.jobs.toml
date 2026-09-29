@@ -1,0 +1,17 @@
+app = "magic-services-jobs"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ENVIRONMENT = "production"
+  PYTHONUNBUFFERED = "1"
+  GOOGLE_CREDENTIALS_PATH = "./credentials/google.json"
+
+[processes]
+  app = "python main.py --jobs-only"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

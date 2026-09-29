@@ -1,0 +1,70 @@
+name: "🔎 Reporte de Reconciliación (Grupo ↔ BD)"
+
+# Solo lectura: obtiene miembros del grupo vía Telethon y los cruza con la BD.
+# No expulsa ni borra nada. Usa el workflow "🧹 Limpieza de Suscripciones" para eliminar.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ambiente"
+        required: true
+        default: "production"
+        type: choice
+        options: ["testing", "production"]
+
+jobs:
+  reconcile-report:
+    runs-on: ubuntu-latest
+    # Solo en el repo operativo (el repo público no tiene secretos).
+    if: github.repository == 'YeyitoDev/magic-services'
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+
+      - name: Create .env
+        run: |
+          cat > .env << EOF
+          ENVIRONMENT=${{ github.event.inputs.environment || 'production' }}
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_NOTIFY_IDS=${{ secrets.ADMIN_NOTIFY_IDS }}
+          PROTECTED_USER_IDS=${{ secrets.PROTECTED_USER_IDS }}
+          TELEGRAM_VALIDATOR_IDS=${{ secrets.TELEGRAM_VALIDATOR_IDS }}
+          TELEGRAM_VIP_GROUP_ID=${{ secrets.TELEGRAM_VIP_GROUP_ID }}
+          DB_ENGINE=mysql+pymysql
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_PORT=3306
+          TIMEZONE=America/Lima
+          TELETHON_API_ID=${{ secrets.TELETHON_API_ID }}
+          TELETHON_API_HASH=${{ secrets.TELETHON_API_HASH }}
+          TELETHON_SESSION=${{ secrets.TELETHON_SESSION }}
+          EOF
+
+      - name: Run reconciliation report
+        run: python -m jobs.reconcile_report
+
+      - name: Save report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconcile-report-${{ github.run_id }}
+          path: output/
+          retention-days: 7
+
+      - name: Send report via Telegram
+        if: always()
+        run: |
+          REPORT_DIR=$(find output -maxdepth 2 -type d | sort | tail -1)
+          for f in "$REPORT_DIR"/*.{xlsx,json}; do
+            [ -f "$f" ] || continue
+            curl -s -F "chat_id=${{ secrets.ADMIN_CHAT_ID }}" -F "document=@$f" \
+              "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" | \
+              python -c "import sys,json; d=json.load(sys.stdin); print('✓ Sent:', d.get('result',{}).get('document',{}).get('file_name','file'))"
+          done

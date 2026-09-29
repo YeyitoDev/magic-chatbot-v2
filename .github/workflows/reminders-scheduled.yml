@@ -1,0 +1,53 @@
+name: "⏰ Recordatorios"
+
+on:
+  schedule:
+    - cron: "0 * * * *" # Cada hora
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ambiente"
+        required: true
+        default: "testing"
+        type: choice
+        options: ["testing", "production"]
+
+jobs:
+  reminders:
+    runs-on: ubuntu-latest
+    # Solo en el repo operativo (el repo público no tiene secretos).
+    if: github.repository == 'YeyitoDev/magic-services'
+    permissions:
+      contents: read
+    environment: ${{ github.event_name == 'schedule' && 'production' || github.event.inputs.environment || 'production' }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+
+      - name: Create .env
+        run: |
+          cat > .env << EOF
+          ENVIRONMENT=${{ github.event_name == 'schedule' && 'production' || github.event.inputs.environment || 'production' }}
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          DB_ENGINE=mysql+pymysql
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_PORT=3306
+          TIMEZONE=America/Lima
+          EOF
+
+      - name: Run reminders
+        run: python -m jobs.promotion_batch
+
+      - name: Save logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reminders-logs-${{ github.run_id }}
+          path: logs/
+          retention-days: 7
