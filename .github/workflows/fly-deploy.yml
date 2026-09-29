@@ -69,6 +69,14 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          TELEGRAM_ERROR_NOTIFICATION_USER_ID: ${{ secrets.TELEGRAM_ERROR_NOTIFICATION_USER_ID }}
+          TELEGRAM_DEFAULT_VIP_LINK: ${{ secrets.TELEGRAM_DEFAULT_VIP_LINK }}
+          ADMIN_NOTIFY_IDS: ${{ secrets.ADMIN_NOTIFY_IDS }}
+          PROTECTED_USER_IDS: ${{ secrets.PROTECTED_USER_IDS }}
+          PAYMENT_HOLDER_NAME: ${{ secrets.PAYMENT_HOLDER_NAME }}
+          PAYMENT_YAPE_PLIN: ${{ secrets.PAYMENT_YAPE_PLIN }}
+          PAYMENT_BCP_ACCOUNT: ${{ secrets.PAYMENT_BCP_ACCOUNT }}
+          PAYMENT_SCOTIABANK_ACCOUNT: ${{ secrets.PAYMENT_SCOTIABANK_ACCOUNT }}
         run: |
           set -euo pipefail
 
@@ -87,6 +95,14 @@ jobs:
           add GEMINI_API_KEY            "$GEMINI_API_KEY"
           add AWS_ACCESS_KEY_ID         "$AWS_ACCESS_KEY_ID"
           add AWS_SECRET_ACCESS_KEY     "$AWS_SECRET_ACCESS_KEY"
+          add TELEGRAM_ERROR_NOTIFICATION_USER_ID "$TELEGRAM_ERROR_NOTIFICATION_USER_ID"
+          add TELEGRAM_DEFAULT_VIP_LINK "$TELEGRAM_DEFAULT_VIP_LINK"
+          add ADMIN_NOTIFY_IDS          "$ADMIN_NOTIFY_IDS"
+          add PROTECTED_USER_IDS        "$PROTECTED_USER_IDS"
+          add PAYMENT_HOLDER_NAME       "$PAYMENT_HOLDER_NAME"
+          add PAYMENT_YAPE_PLIN         "$PAYMENT_YAPE_PLIN"
+          add PAYMENT_BCP_ACCOUNT       "$PAYMENT_BCP_ACCOUNT"
+          add PAYMENT_SCOTIABANK_ACCOUNT "$PAYMENT_SCOTIABANK_ACCOUNT"
 
           # Constantes
           ARGS+=("DB_ENGINE=mysql+pymysql")
